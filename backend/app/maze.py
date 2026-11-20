@@ -183,7 +183,7 @@ def _try_generate(width: int, height: int, seed: int) -> Maze:
     return m
 
 
-def generate_maze(width: int, height: int, seed: int, max_qubits: int, attempts: int = 400) -> Maze:
+def generate_maze(width: int, height: int, seed: int, max_qubits: int, attempts: int | None = None) -> Maze:
     """Generate a maze whose shortest route needs about `max_qubits` decisions.
 
     Tries seed, seed+1, ... and returns the first maze needing between
@@ -191,6 +191,9 @@ def generate_maze(width: int, height: int, seed: int, max_qubits: int, attempts:
     does, the closest fit at or below the cap is used; if even that is missing
     the smallest maze found is returned and the caller can reject it.
     """
+    if attempts is None:
+        # big mazes rarely have a short shortest route, so search more seeds (~3 per cell)
+        attempts = max(400, 3 * width * height)
     best: Maze | None = None
     best_score = (1, 1 << 30)  # (over cap?, distance below cap)
     for i in range(attempts):

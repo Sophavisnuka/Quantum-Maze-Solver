@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { CircuitView, Histogram, ProbCurve, type Bar } from './Charts'
 
 type Pt = [number, number]
 
@@ -22,6 +23,10 @@ interface Round {
   theory_p?: number
   p_marked: number
   found_length: number | null
+  shots?: number
+  distinct_outcomes?: number
+  top?: Bar[]
+  curve?: number[]
 }
 
 interface Solution {
@@ -41,7 +46,10 @@ const SIZES = [
   { label: 'Medium 12 × 8', w: 12, h: 8, q: 10 },
   { label: 'Large 16 × 10', w: 16, h: 10, q: 12 },
   { label: 'Extra large 20 × 13', w: 20, h: 13, q: 14 },
+  { label: 'Huge 24 × 16', w: 24, h: 16, q: 14, minQ: 14 },
+  { label: 'Giant 30 × 20 (slow)', w: 30, h: 20, q: 16, minQ: 16 },
 ]
+
 const QUBIT_CAPS = [8, 10, 12, 14, 16]
 
 const key = (p: Pt) => `${p[0]},${p[1]}`
@@ -86,6 +94,7 @@ export default function App() {
   const [path, setPath] = useState<Pt[]>([])
   const [solution, setSolution] = useState<Solution | null>(null)
   const [showGrover, setShowGrover] = useState(false)
+  const [roundIdx, setRoundIdx] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [verdict, setVerdict] = useState<{ ok: boolean; text: string } | null>(null)
@@ -117,7 +126,7 @@ export default function App() {
   )
 
   const onCellClick = (r: number, c: number) => {
-    if (!maze || maze.grid[r][c] !== 0) return
+    if (!maze || maze.grid[r]?.[c] !== 0) return
     setVerdict(null)
     const idx = path.findIndex((p) => p[0] === r && p[1] === c)
     if (idx >= 0) {
@@ -127,8 +136,26 @@ export default function App() {
     const head = path[path.length - 1]
     if (head[0] === maze.goal[0] && head[1] === maze.goal[1]) return // already at the exit
     const seg = bfs(maze.grid, head, [r, c], userSet)
-    if (seg) setPath([...path, ...seg.slice(1)])
+    if (!seg) return
+    // No auto-routing: only allow a single step from the end of the path.
+    if (seg.length > 3) return
+    setPath([...path, ...seg.slice(1)])
   }
+
+  // Arrow keys move the end of the path one cell; moving back onto the trail undoes a step.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key]
+      if (!d || !maze || busy || path.length === 0) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return
+      e.preventDefault()
+      const head = path[path.length - 1]
+      onCellClick(head[0] + d[0], head[1] + d[1])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const runGrover = useCallback(async (): Promise<Solution | null> => {
     if (!maze) return null
@@ -140,6 +167,7 @@ export default function App() {
         `/api/solve?width=${maze.width}&height=${maze.height}&seed=${maze.seed}&max_qubits=${maxQubits}`,
       )
       setSolution(s)
+      setRoundIdx(Math.max(0, s.rounds.length - 1)) // show the final round by default
       return s
     } catch (e) {
       setError((e as Error).message)
@@ -214,7 +242,7 @@ export default function App() {
         <label>
           Qubit limit
           <select value={maxQubits} onChange={(e) => setMaxQubits(Number(e.target.value))}>
-            {QUBIT_CAPS.map((q) => (
+            {QUBIT_CAPS.filter((q) => q >= (('minQ' in size && size.minQ) || 0)).map((q) => (
               <option key={q} value={q}>{q}{q > 14 ? ' (slow)' : ''}</option>
             ))}
           </select>
@@ -240,7 +268,7 @@ export default function App() {
             <span><i style={{ background: 'var(--user)' }} />Your path</span>
             <span><i style={{ background: 'var(--grover)' }} />Grover path</span>
           </div>
-          <p className="hint">Click any open cell to extend your path to it. Click a cell on your path to undo back to it.</p>
+          <p className="hint">Use the arrow keys, or click the next open cell beside the end of your path, to extend it one step at a time. Click a cell on your path to undo back to it.</p>
         </>
       )}
       {!maze && !error && <p className="hint">Generating maze…</p>}
@@ -293,6 +321,60 @@ export default function App() {
           </table>
         </div>
       )}
+
+      {solution && maze && (() => {
+        const rd = solution.rounds[Math.min(roundIdx, solution.rounds.length - 1)]
+        if (!rd) return null
+        return (
+          <div className="panel">
+            <h2>Quantum circuit &amp; measurements</h2>
+            <div className="controls" style={{ justifyContent: 'flex-start' }}>
+              <label>
+                Round
+                <select value={roundIdx} onChange={(e) => setRoundIdx(Number(e.target.value))}>
+                  {solution.rounds.map((r, i) => (
+                    <option key={r.round} value={i}>
+                      {r.round} ({r.marked} marked, {r.iterations} iterations)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <h3>Circuit ({solution.qubits} qubits)</h3>
+            <p className="hint" style={{ textAlign: 'left' }}>
+              Hadamards put all {solution.search_space.toLocaleString()} routes in superposition. Each Grover
+              iteration flips the sign of the {rd.marked} marked routes (oracle) and reflects every amplitude about
+              the mean (diffuser). Measurement then collapses to a route.
+            </p>
+            <CircuitView qubits={solution.qubits} iterations={rd.iterations} />
+
+            {rd.top && rd.shots && (
+              <>
+                <h3>Measurement histogram ({rd.shots} shots)</h3>
+                <p className="hint" style={{ textAlign: 'left' }}>
+                  Top {rd.top.length} of {rd.distinct_outcomes} distinct outcomes.
+                  <span className="key marked" /> marked route <span className="key other" /> not marked.
+                  P(marked) measured {(rd.p_marked * 100).toFixed(1)}%
+                  {rd.theory_p != null && <> vs theory {(rd.theory_p * 100).toFixed(1)}%</>}.
+                </p>
+                <Histogram bars={rd.top} shots={rd.shots} />
+              </>
+            )}
+
+            {rd.curve && (
+              <>
+                <h3>Success probability vs iterations</h3>
+                <p className="hint" style={{ textAlign: 'left' }}>
+                  Theory curve sin²((2k+1)θ). Too few or too many iterations lowers the odds; the big dot is the
+                  count used and the ring is the measured result.
+                </p>
+                <ProbCurve curve={rd.curve} chosen={rd.iterations} measured={rd.p_marked} />
+              </>
+            )}
+          </div>
+        )
+      })()}
     </>
   )
 }

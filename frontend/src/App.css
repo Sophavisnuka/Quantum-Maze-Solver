@@ -32,6 +32,39 @@ table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--muted); font-weight: 500; }
-code { color: var(--grover); }
+code { color: #a16207; }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* ---- circuit / histogram / curve ---- */
+.panel h3 { margin: 18px 0 6px; font-size: .95rem; }
+.chart-scroll { overflow-x: auto; }
+.circuit, .curve { width: 100%; max-width: 560px; height: auto; display: block; }
+.circuit { min-width: 420px; }
+.c-wire { stroke: var(--muted); stroke-width: 1; }
+.c-grid { stroke: var(--border); stroke-width: 1; }
+.c-small { fill: var(--muted); font-size: 10px; }
+.c-label { fill: var(--text); font-size: 12px; font-weight: 600; }
+.c-gate { fill: var(--panel); stroke: var(--accent); }
+.c-meas { fill: var(--panel); stroke: var(--muted); }
+.c-oracle { fill: color-mix(in srgb, var(--goal) 25%, var(--panel)); stroke: var(--goal); }
+.c-diff { fill: color-mix(in srgb, var(--accent) 25%, var(--panel)); stroke: var(--accent); }
+.c-repeat { fill: none; stroke: var(--muted); stroke-dasharray: 4 4; }
+.curve-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.curve-dot { fill: var(--accent); }
+.curve-dot.chosen { fill: var(--goal); }
+.curve-measured { fill: none; stroke: var(--text); stroke-width: 2; }
+
+.hist { display: grid; gap: 4px; }
+.hist-row { display: grid; grid-template-columns: minmax(70px, 150px) 1fr 100px 70px; gap: 8px; align-items: center; font-size: .85rem; }
+.hist-bits { overflow: hidden; text-overflow: ellipsis; }
+.hist-track { background: var(--border); border-radius: 3px; height: 14px; overflow: hidden; }
+.hist-bar { height: 100%; }
+.hist-bar.marked { background: var(--grover); }
+.hist-bar.other { background: var(--muted); }
+.hist-n { text-align: right; }
+.hist-n small, .hist-len { color: var(--muted); }
+.hist-len { text-align: right; }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 8px; }
+.key.marked { background: var(--grover); }
+.key.other { background: var(--muted); }

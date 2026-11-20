@@ -31,6 +31,13 @@ def health_check():
 def _maze(width: int, height: int, seed: int, max_qubits: int):
     maze = generate_maze(width, height, seed, max_qubits)
     k = maze.qubits_needed()
+    # Big mazes occasionally miss the qubit cap in one seed sweep. If we were close,
+    # sweep a fresh seed range (the effective seed is returned, so /api/solve matches).
+    for retry in range(1, 3):
+        if k <= max_qubits or k > max_qubits + 2:
+            break
+        maze = generate_maze(width, height, seed + retry * 1_000_000, max_qubits)
+        k = maze.qubits_needed()
     if k > max_qubits:
         raise HTTPException(
             422,

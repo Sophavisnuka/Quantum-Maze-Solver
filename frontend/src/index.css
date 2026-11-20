@@ -1,16 +1,16 @@
 :root {
-  --bg: #050505;
-  --panel: #111214;
-  --border: #26282c;
-  --text: #f2f3f5;
-  --muted: #9a9fa8;
-  --accent: #8b5cf6;
+  --bg: #ffffff;
+  --panel: #f5f6f8;
+  --border: #d4d7dd;
+  --text: #16181d;
+  --muted: #5f6672;
+  --accent: #7c3aed;
   --user: #3b82f6;
-  --grover: #facc15;
+  --grover: #f5b800;
   --start: #ef3a2a;
   --goal: #3a8228;
-  --ok: #34d399;
-  --bad: #f87171;
+  --ok: #15803d;
+  --bad: #dc2626;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);

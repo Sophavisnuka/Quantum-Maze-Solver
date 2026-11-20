@@ -31,6 +31,7 @@ from .maze import Maze
 
 INF = 1 << 30
 MAX_QUBITS = 20
+TOP_BARS = 12  # histogram bars returned per round
 
 
 def _walk_lengths(maze: Maze, k: int) -> np.ndarray:
@@ -129,7 +130,9 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
         idx = max(hits, key=lambda i: (hits[i], -int(lengths[i])))
         best_idx = idx
         threshold = int(lengths[idx])
-        top = sorted(counts.items(), key=lambda kv: -kv[1])[:6]
+        top = sorted(counts.items(), key=lambda kv: -kv[1])[:TOP_BARS]
+        # theory curve: P(marked) after k = 0 .. 2*iterations+1 Grover iterations
+        curve = [math.sin((2 * k + 1) * theta) ** 2 for k in range(2 * iterations + 2)]
         rounds.append({
             "round": round_no,
             "threshold": None if round_no == 1 else rounds[-1]["found_length"],
@@ -138,7 +141,12 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
             "theory_p": math.sin((2 * iterations + 1) * theta) ** 2,
             "p_marked": p_marked,
             "found_length": threshold,
-            "top": [{"bits": b, "count": c, "marked": int(b, 2) in marked_set} for b, c in top],
+            "shots": shots,
+            "distinct_outcomes": len(counts),
+            "top": [{"bits": b, "count": c, "marked": int(b, 2) in marked_set,
+                     "length": int(lengths[int(b, 2)]) if int(b, 2) in marked_set else None}
+                    for b, c in top],
+            "curve": curve,
         })
 
     if best_idx is None:
