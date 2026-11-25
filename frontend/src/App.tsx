@@ -23,6 +23,7 @@ interface Round {
   theory_p?: number
   p_marked: number
   found_length: number | null
+  time_ms?: number
   shots?: number
   distinct_outcomes?: number
   top?: Bar[]
@@ -39,6 +40,7 @@ interface Solution {
   path: Pt[]
   verified: boolean
   classical_length: number
+  elapsed_ms?: number
 }
 
 const SIZES = [
@@ -52,11 +54,16 @@ const SIZES = [
 
 const QUBIT_CAPS = [8, 10, 12, 14, 16]
 
+const fmtTime = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`)
+
 const key = (p: Pt) => `${p[0]},${p[1]}`
 const randomSeed = () => Math.floor(Math.random() * 100000)
 
+// Empty in dev (Vite proxies /api). In production set VITE_API_URL to the backend URL.
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
 async function api<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+  const res = await fetch(`${API_BASE}${url}`)
   if (!res.ok) {
     const body = await res.json().catch(() => null)
     throw new Error(body?.detail ?? `Request failed (${res.status})`)
@@ -223,33 +230,8 @@ export default function App() {
       <h1>Quantum Maze Solver</h1>
       <p className="sub">Draw your own route by clicking, then check it against the shortest route found with Grover search.</p>
 
-      <div className="controls">
-        <label>
-          Maze size
-          <select
-            value={sizeIdx}
-            onChange={(e) => {
-              const i = Number(e.target.value)
-              setSizeIdx(i)
-              setMaxQubits(SIZES[i].q)
-            }}
-          >
-            {SIZES.map((s, i) => (
-              <option key={s.label} value={i}>{s.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Qubit limit
-          <select value={maxQubits} onChange={(e) => setMaxQubits(Number(e.target.value))}>
-            {QUBIT_CAPS.filter((q) => q >= (('minQ' in size && size.minQ) || 0)).map((q) => (
-              <option key={q} value={q}>{q}{q > 14 ? ' (slow)' : ''}</option>
-            ))}
-          </select>
-        </label>
-        <button onClick={() => setSeed(randomSeed())} disabled={busy}>Regenerate maze</button>
-      </div>
-
+      <div className="layout">
+      <main className="main">
       {maze && (
         <>
           <div
@@ -273,18 +255,6 @@ export default function App() {
       )}
       {!maze && !error && <p className="hint">Generating maze…</p>}
 
-      <div className="controls">
-        <button className="primary" onClick={onCheck} disabled={!maze || busy}>
-          {busy ? 'Running Grover…' : 'Check my path'}
-        </button>
-        <button onClick={onSolve} disabled={!maze || busy}>Solve with Grover</button>
-        <button onClick={reset} disabled={!maze || busy}>Reset path</button>
-      </div>
-
-      <div className={`status ${verdict ? (verdict.ok ? 'ok' : 'bad') : error ? 'bad' : ''}`}>
-        {error || verdict?.text}
-      </div>
-
       {solution && maze && (
         <div className="panel">
           <h2>Grover search result</h2>
@@ -293,6 +263,9 @@ export default function App() {
             <div className="stat"><b>{solution.search_space.toLocaleString()}</b><span>candidate routes (2^n)</span></div>
             <div className="stat"><b>{solution.valid_routes}</b><span>valid routes to the exit</span></div>
             <div className="stat"><b>{solution.length}</b><span>steps in shortest route</span></div>
+            {solution.elapsed_ms != null && (
+              <div className="stat"><b>{fmtTime(solution.elapsed_ms)}</b><span>time to find it</span></div>
+            )}
             <div className="stat">
               <b style={{ color: solution.verified ? 'var(--ok)' : 'var(--bad)' }}>{solution.verified ? 'Yes' : 'No'}</b>
               <span>matches classical Dijkstra ({solution.classical_length})</span>
@@ -304,7 +277,7 @@ export default function App() {
           </p>
           <table>
             <thead>
-              <tr><th>Round</th><th>Marks routes shorter than</th><th>Marked</th><th>Grover iterations</th><th>P(marked)</th><th>Measured route</th></tr>
+              <tr><th>Round</th><th>Marks routes shorter than</th><th>Marked</th><th>Grover iterations</th><th>P(marked)</th><th>Measured route</th><th>Time</th></tr>
             </thead>
             <tbody>
               {solution.rounds.map((r) => (
@@ -315,6 +288,7 @@ export default function App() {
                   <td>{r.iterations}</td>
                   <td>{(r.p_marked * 100).toFixed(0)}%</td>
                   <td>{r.found_length ?? '–'} steps</td>
+                  <td>{r.time_ms != null ? fmtTime(r.time_ms) : '–'}</td>
                 </tr>
               ))}
             </tbody>
@@ -375,6 +349,54 @@ export default function App() {
           </div>
         )
       })()}
+      </main>
+
+      <aside className="sidebar">
+      <div className="panel side-panel">
+        <h2>Settings</h2>
+        <div className="controls">
+        <label>
+          Maze size
+          <select
+            value={sizeIdx}
+            onChange={(e) => {
+              const i = Number(e.target.value)
+              setSizeIdx(i)
+              setMaxQubits(SIZES[i].q)
+            }}
+          >
+            {SIZES.map((s, i) => (
+              <option key={s.label} value={i}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Qubit limit
+          <select value={maxQubits} onChange={(e) => setMaxQubits(Number(e.target.value))}>
+            {QUBIT_CAPS.filter((q) => q >= (('minQ' in size && size.minQ) || 0)).map((q) => (
+              <option key={q} value={q}>{q}{q > 14 ? ' (slow)' : ''}</option>
+            ))}
+          </select>
+        </label>
+        <button onClick={() => setSeed(randomSeed())} disabled={busy}>Regenerate maze</button>
+        </div>
+      </div>
+
+      <div className="panel side-panel">
+        <h2>Actions</h2>
+        <div className="actions">
+          <button className="primary" onClick={onCheck} disabled={!maze || busy}>
+            {busy ? 'Running Grover…' : 'Check my path'}
+          </button>
+          <button onClick={onSolve} disabled={!maze || busy}>Solve with Grover</button>
+          <button onClick={reset} disabled={!maze || busy}>Reset path</button>
+        </div>
+        <div className={`status ${verdict ? (verdict.ok ? 'ok' : 'bad') : error ? 'bad' : ''}`}>
+          {error || verdict?.text}
+        </div>
+      </div>
+      </aside>
+      </div>
     </>
   )
 }

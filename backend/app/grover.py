@@ -20,7 +20,9 @@ faithfully but gives no real-world speed-up.
 
 from __future__ import annotations
 
+import logging
 import math
+import time
 
 import numpy as np
 from qiskit import QuantumCircuit, transpile
@@ -28,6 +30,9 @@ from qiskit.circuit.library import DiagonalGate
 from qiskit_aer import AerSimulator
 
 from .maze import Maze
+
+# uvicorn configures this logger, so INFO lines show in the server console
+log = logging.getLogger("uvicorn.error")
 
 INF = 1 << 30
 MAX_QUBITS = 20
@@ -85,6 +90,7 @@ def _grover_counts(n: int, marked: np.ndarray, iterations: int, backend, shots: 
     oracle = DiagonalGate(oracle_diag.tolist())
     diffuser = DiagonalGate(diffuser_diag.tolist())
 
+    t0 = time.perf_counter()
     qc = QuantumCircuit(n)
     qc.h(range(n))
     for _ in range(iterations):
@@ -93,7 +99,15 @@ def _grover_counts(n: int, marked: np.ndarray, iterations: int, backend, shots: 
         qc.append(diffuser, range(n))
         qc.h(range(n))
     qc.measure_all()
-    result = backend.run(transpile(qc, backend), shots=shots).result()
+    t1 = time.perf_counter()
+    compiled = transpile(qc, backend)
+    t2 = time.perf_counter()
+    result = backend.run(compiled, shots=shots).result()
+    t3 = time.perf_counter()
+    log.info(
+        "[grover]   circuit build %.0f ms | transpile %.0f ms | simulate %.0f ms (%d qubits, %d iterations, %d shots)",
+        (t1 - t0) * 1000, (t2 - t1) * 1000, (t3 - t2) * 1000, n, iterations, shots,
+    )
     return result.get_counts()
 
 
@@ -104,7 +118,10 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
     k = max(k, 1)
     n = k
     size = 1 << n
+    t_start = time.perf_counter()
+    log.info("[grover] start: %d qubits, search space %d", n, size)
     lengths = _walk_lengths(maze, n)
+    log.info("[grover] classical walk table built in %.0f ms", (time.perf_counter() - t_start) * 1000)
     backend = AerSimulator(method="statevector")
 
     threshold = INF
@@ -117,7 +134,11 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
             break
         theta = math.asin(math.sqrt(m / size))
         iterations = max(0, int(round(math.pi / (4 * theta) - 0.5)))
+        t_round = time.perf_counter()
         counts = _grover_counts(n, marked, iterations, backend, shots)
+        round_ms = (time.perf_counter() - t_round) * 1000
+        log.info("[grover] round %d: %d marked, %d iterations, took %.0f ms",
+                 round_no, m, iterations, round_ms)
 
         marked_set = set(marked.tolist())
         hits = {int(b, 2): c for b, c in counts.items() if int(b, 2) in marked_set}
@@ -125,7 +146,7 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
         if not hits:  # extremely unlikely, retry round
             rounds.append({"round": round_no, "threshold": None if threshold == INF else threshold,
                            "marked": m, "iterations": iterations, "p_marked": p_marked,
-                           "found_length": None})
+                           "found_length": None, "time_ms": round_ms})
             continue
         idx = max(hits, key=lambda i: (hits[i], -int(lengths[i])))
         best_idx = idx
@@ -138,6 +159,7 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
             "threshold": None if round_no == 1 else rounds[-1]["found_length"],
             "marked": m,
             "iterations": iterations,
+            "time_ms": round_ms,
             "theory_p": math.sin((2 * iterations + 1) * theta) ** 2,
             "p_marked": p_marked,
             "found_length": threshold,
@@ -154,6 +176,9 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
 
     cells = _decode(maze, best_idx, n)
     classical_len, _ = maze.dijkstra()
+    elapsed_ms = (time.perf_counter() - t_start) * 1000
+    log.info("[grover] done: %d rounds, shortest %d steps, total %.0f ms",
+             len(rounds), int(lengths[best_idx]), elapsed_ms)
     return {
         "qubits": n,
         "search_space": size,
@@ -164,4 +189,5 @@ def solve(maze: Maze, shots: int = 1024) -> dict:
         "path": [list(u) for u in maze.cells_to_units(cells)],
         "verified": int(lengths[best_idx]) == classical_len,
         "classical_length": classical_len,
+        "elapsed_ms": elapsed_ms,
     }
