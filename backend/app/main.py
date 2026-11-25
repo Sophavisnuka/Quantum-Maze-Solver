@@ -1,8 +1,17 @@
+import logging
+import os
+import time
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .grover import MAX_QUBITS, solve
 from .maze import generate_maze
+
+# Deployed frontend URL(s), comma separated, e.g. https://my-maze.vercel.app
+_extra_origins = [o.strip().rstrip("/") for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
+
+log = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
     title="Quantum Maze Solver",
@@ -13,7 +22,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *_extra_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +38,7 @@ def health_check():
 
 
 def _maze(width: int, height: int, seed: int, max_qubits: int):
+    t0 = time.perf_counter()
     maze = generate_maze(width, height, seed, max_qubits)
     k = maze.qubits_needed()
     # Big mazes occasionally miss the qubit cap in one seed sweep. If we were close,
@@ -44,6 +54,8 @@ def _maze(width: int, height: int, seed: int, max_qubits: int):
             f"Could not find a {width}x{height} maze solvable with {max_qubits} qubits "
             f"(best needs {k}). Raise the qubit limit or pick a smaller maze.",
         )
+    log.info("[maze] %dx%d seed=%d cap=%d -> needs %d qubits, generated in %.0f ms",
+             width, height, seed, max_qubits, k, (time.perf_counter() - t0) * 1000)
     return maze, k
 
 
@@ -74,5 +86,8 @@ def solve_maze(
     seed: int = 0,
     max_qubits: int = Query(12, ge=4, le=MAX_QUBITS),
 ):
+    t0 = time.perf_counter()
     maze, _ = _maze(width, height, seed, max_qubits)
-    return solve(maze)
+    result = solve(maze)
+    log.info("[solve] request finished in %.0f ms total", (time.perf_counter() - t0) * 1000)
+    return result
