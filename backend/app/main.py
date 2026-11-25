@@ -1,93 +1,39 @@
-import logging
-import os
-import time
+"""App factory: wires settings, CORS, error handling and routes together."""
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from .grover import MAX_QUBITS, solve
-from .maze import generate_maze
-
-# Deployed frontend URL(s), comma separated, e.g. https://my-maze.vercel.app
-_extra_origins = [o.strip().rstrip("/") for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
-
-log = logging.getLogger("uvicorn.error")
-
-app = FastAPI(
-    title="Quantum Maze Solver",
-    description="A FastAPI application for solving mazes using quantum algorithms.",
-    version="1.0.0",
-)
+from .api.routes import router
+from .core.config import settings
+from .domain.errors import QuantumMazeError
+from .services.maze_service import ServerBusyError
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *_extra_origins],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=settings.app_title,
+        description=settings.app_description,
+        version=settings.app_version,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.exception_handler(QuantumMazeError)
+    async def _bad_request(_: Request, exc: QuantumMazeError):
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(ServerBusyError)
+    async def _busy(_: Request, exc: ServerBusyError):
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    app.include_router(router)
+    return app
 
 
-@app.get("/api/test")
-def health_check():
-    return {
-        "status": "success",
-        "message": "Quantum Maze Solver API is running!"
-    }
-
-
-def _maze(width: int, height: int, seed: int, max_qubits: int):
-    t0 = time.perf_counter()
-    maze = generate_maze(width, height, seed, max_qubits)
-    k = maze.qubits_needed()
-    # Big mazes occasionally miss the qubit cap in one seed sweep. If we were close,
-    # sweep a fresh seed range (the effective seed is returned, so /api/solve matches).
-    for retry in range(1, 3):
-        if k <= max_qubits or k > max_qubits + 2:
-            break
-        maze = generate_maze(width, height, seed + retry * 1_000_000, max_qubits)
-        k = maze.qubits_needed()
-    if k > max_qubits:
-        raise HTTPException(
-            422,
-            f"Could not find a {width}x{height} maze solvable with {max_qubits} qubits "
-            f"(best needs {k}). Raise the qubit limit or pick a smaller maze.",
-        )
-    log.info("[maze] %dx%d seed=%d cap=%d -> needs %d qubits, generated in %.0f ms",
-             width, height, seed, max_qubits, k, (time.perf_counter() - t0) * 1000)
-    return maze, k
-
-
-@app.get("/api/maze")
-def get_maze(
-    width: int = Query(12, ge=4, le=30),
-    height: int = Query(8, ge=4, le=30),
-    seed: int = 0,
-    max_qubits: int = Query(12, ge=4, le=MAX_QUBITS),
-):
-    maze, k = _maze(width, height, seed, max_qubits)
-    return {
-        "width": width,
-        "height": height,
-        "seed": maze.seed,  # effective seed - pass it back to /api/solve
-        "grid": maze.unit_grid(),
-        "start": [2 * maze.start[0] + 1, 2 * maze.start[1] + 1],
-        "goal": [2 * maze.goal[0] + 1, 2 * maze.goal[1] + 1],
-        "qubits": k,
-        "decision_nodes": len(maze.nodes),
-    }
-
-
-@app.get("/api/solve")
-def solve_maze(
-    width: int = Query(12, ge=4, le=30),
-    height: int = Query(8, ge=4, le=30),
-    seed: int = 0,
-    max_qubits: int = Query(12, ge=4, le=MAX_QUBITS),
-):
-    t0 = time.perf_counter()
-    maze, _ = _maze(width, height, seed, max_qubits)
-    result = solve(maze)
-    log.info("[solve] request finished in %.0f ms total", (time.perf_counter() - t0) * 1000)
-    return result
+app = create_app()
