@@ -9,7 +9,23 @@ button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
-.maze { display: grid; width: 100%; margin: 0 auto 16px; border: 2px solid var(--border); user-select: none; background: #000; }
+.maze-wrap { position: relative; width: 100%; margin: 0 auto 16px; }
+.maze { display: grid; width: 100%; user-select: none; background: #fff; transition: opacity .15s; }
+.maze.loading { opacity: .35; pointer-events: none; }
+.maze-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; color: var(--text); }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-first { display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+.explain { margin-top: 16px; color: var(--muted); font-size: .9rem; }
+.explain summary { cursor: pointer; font-weight: 600; color: var(--text); }
+.explain p { margin: 6px 0; }
+
+.steps { display: flex; gap: 20px; margin: 0; }
+.steps dt { color: var(--muted); font-size: .8rem; }
+.steps dd { margin: 2px 0 0; font-size: 1.1rem; font-weight: 600; }
+.steps dd.big { font-size: 1.6rem; color: var(--user); }
+/* walls, doorways and rooms are all the same size */
 .u { aspect-ratio: 1; background: #fff; cursor: pointer; }
 .u.wall { background: #000; cursor: default; }
 .u.user { background: var(--user); }
