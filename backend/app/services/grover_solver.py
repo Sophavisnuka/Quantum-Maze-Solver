@@ -101,6 +101,7 @@ def solve(maze: Maze, shots: int | None = None, engine: GroverEngine | None = No
     best_idx: int | None = None
     rounds: list[dict] = []
     for round_no in range(1, 50):
+        shown_threshold = None if threshold == INF else threshold  # None = no result yet (shown as ∞)
         marked = np.flatnonzero(lengths < threshold)
         m = len(marked)
         if m == 0:
@@ -117,7 +118,7 @@ def solve(maze: Maze, shots: int | None = None, engine: GroverEngine | None = No
         hits = {int(b, 2): c for b, c in counts.items() if int(b, 2) in marked_set}
         p_marked = sum(hits.values()) / shots
         if not hits:  # extremely unlikely, retry round
-            rounds.append({"round": round_no, "threshold": None if threshold == INF else threshold,
+            rounds.append({"round": round_no, "threshold": shown_threshold,
                            "marked": m, "iterations": iterations, "p_marked": p_marked,
                            "found_length": None, "time_ms": round_ms})
             continue
@@ -129,7 +130,7 @@ def solve(maze: Maze, shots: int | None = None, engine: GroverEngine | None = No
         curve = [math.sin((2 * j + 1) * theta) ** 2 for j in range(2 * iterations + 2)]
         rounds.append({
             "round": round_no,
-            "threshold": None if round_no == 1 else rounds[-1]["found_length"],
+            "threshold": shown_threshold,
             "marked": m,
             "iterations": iterations,
             "time_ms": round_ms,
@@ -160,7 +161,7 @@ def solve(maze: Maze, shots: int | None = None, engine: GroverEngine | None = No
         "rounds": rounds,
         "length": int(lengths[best_idx]),
         "bitstring": format(best_idx, f"0{n}b"),
-        "path": [list(u) for u in maze.cells_to_units(cells)],
+        "path": [list(c) for c in cells],
         "verified": int(lengths[best_idx]) == classical_len,
         "classical_length": classical_len,
         "elapsed_ms": elapsed_ms,

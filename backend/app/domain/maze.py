@@ -1,8 +1,8 @@
-"""Maze generation and reduction to a junction graph.
+"""Maze model and reduction to a junction graph.
 
-The maze is drawn on a "thick wall" unit grid of (2H+1) x (2W+1) units. Cell
-(r, c) lives at unit (2r+1, 2c+1); the unit between two cells is the passage.
-`grid[y][x] == 1` means wall, `0` means open. Generation lives in `generator.py`.
+The maze is a width x height grid of cells. `open_cells[r][c]` holds the
+directions (indexes into DIRS) in which the cell has no wall. Generation lives
+in `generator.py`.
 
 For the quantum search we do not encode every cell. Corridors with no choice
 cost nothing, so the maze is collapsed into a graph whose nodes are the start,
@@ -42,37 +42,12 @@ class Maze:
     goal_node: int = 0
 
     # ---- rendering ---------------------------------------------------
-    @staticmethod
-    def cell_to_unit(cell: tuple[int, int]) -> tuple[int, int]:
-        return 2 * cell[0] + 1, 2 * cell[1] + 1
-
-    @property
-    def start_unit(self) -> tuple[int, int]:
-        return self.cell_to_unit(self.start)
-
-    @property
-    def goal_unit(self) -> tuple[int, int]:
-        return self.cell_to_unit(self.goal)
-
-    def unit_grid(self) -> list[list[int]]:
-        grid = [[1] * (2 * self.width + 1) for _ in range(2 * self.height + 1)]
-        for r in range(self.height):
-            for c in range(self.width):
-                grid[2 * r + 1][2 * c + 1] = 0
-                for d in self.open_cells[r][c]:
-                    dr, dc = DIRS[d]
-                    grid[2 * r + 1 + dr][2 * c + 1 + dc] = 0
-        return grid
-
-    def cells_to_units(self, cells: list[tuple[int, int]]) -> list[tuple[int, int]]:
-        """Convert a list of adjacent cells to unit coordinates (adds passage units)."""
-        units: list[tuple[int, int]] = []
-        for i, (r, c) in enumerate(cells):
-            if i > 0:
-                pr, pc = cells[i - 1]
-                units.append((r + pr + 1, c + pc + 1))
-            units.append(self.cell_to_unit((r, c)))
-        return units
+    def open_masks(self) -> list[list[int]]:
+        """masks[r][c] has bit d set when cell (r, c) is open towards DIRS[d] (N=1, E=2, S=4, W=8)."""
+        return [
+            [sum(1 << d for d in self.open_cells[r][c]) for c in range(self.width)]
+            for r in range(self.height)
+        ]
 
     # ---- classical reference (used only to size the search & to verify) ----
     def dijkstra(self) -> tuple[int, list[int]]:

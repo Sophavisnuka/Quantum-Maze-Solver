@@ -6,9 +6,10 @@ export interface MazeData {
   width: number
   height: number
   seed: number
-  grid: number[][]
-  start: Pt
-  goal: Pt
+  /** cells[r][c]: open sides as bits N=1, E=2, S=4, W=8 (a missing bit is a wall). */
+  cells: number[][]
+  start: Pt // [row, col]
+  goal: Pt // [row, col]
   qubits: number
   decision_nodes: number
 }
