@@ -23,9 +23,9 @@ def get_maze(p: MazeQuery):
         "width": p.width,
         "height": p.height,
         "seed": maze.seed,
-        "grid": maze.unit_grid(),
-        "start": list(maze.start_unit),
-        "goal": list(maze.goal_unit),
+        "cells": maze.open_masks(),
+        "start": list(maze.start),
+        "goal": list(maze.goal),
         "qubits": maze.qubits_needed(),
         "decision_nodes": len(maze.nodes),
     }

@@ -14,8 +14,8 @@ class MazeResponse(BaseModel):
     width: int
     height: int
     seed: int  # effective seed - pass it back to /api/solve
-    grid: list[list[int]]
-    start: list[int]
-    goal: list[int]
+    cells: list[list[int]]  # cells[r][c]: open sides as bits N=1, E=2, S=4, W=8
+    start: list[int]  # [row, col]
+    goal: list[int]  # [row, col]
     qubits: int
     decision_nodes: int

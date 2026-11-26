@@ -4,6 +4,7 @@ import CircuitPanel from './components/CircuitPanel'
 import MazeGrid from './components/MazeGrid'
 import SettingsPanel from './components/SettingsPanel'
 import SolutionPanel from './components/SolutionPanel'
+import StepsPanel from './components/StepsPanel'
 import { useMazeGame } from './hooks/useMazeGame'
 
 export default function App() {
@@ -18,9 +19,17 @@ export default function App() {
       <div className="layout">
         <main className="main">
           {maze && (
-            <MazeGrid maze={maze} userSet={game.userSet} groverSet={game.groverSet} onCellClick={game.onCellClick} />
+            <MazeGrid
+              maze={maze}
+              userPath={game.path}
+              groverPath={game.groverPath}
+              loading={game.loadingMaze}
+              onCellClick={game.onCellClick}
+            />
           )}
-          {!maze && !game.error && <p className="hint">Generating maze…</p>}
+          {!maze && !game.error && (
+            <p className="hint loading-first"><span className="spinner" />Generating maze…</p>
+          )}
 
           {solution && maze && <SolutionPanel solution={solution} maze={maze} />}
           {solution && maze && (
@@ -34,12 +43,18 @@ export default function App() {
             sizeIdx={game.sizeIdx}
             maxQubits={game.maxQubits}
             busy={game.busy}
+            loading={game.loadingMaze}
             onSizeChange={game.changeSize}
             onQubitsChange={game.setMaxQubits}
             onRegenerate={game.regenerate}
           />
+          <StepsPanel
+            stepsTaken={game.stepsTaken}
+            stepsBack={game.stepsBack}
+            shortest={solution ? solution.length : null}
+          />
           <ActionsPanel
-            ready={!!maze}
+            ready={!!maze && !game.loadingMaze}
             busy={game.busy}
             error={game.error}
             verdict={game.verdict}
